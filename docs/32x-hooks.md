@@ -97,11 +97,12 @@ the address-less callback on that scope alone. `smoke_32x.lua` does so, one fram
 - **No stepping and no cycle count:** `CanStep` is false, and `Step`, `SetCpuRegister` and `TotalExecutedCycles`
   throw `NotImplementedException`.
 - A callback mustn't change emulation state. Adding and removing callbacks from inside one is fine.
-- **No `32X RAM` or `32X FB` domain when EmuHawk loads a 32X cartridge** (as in stock 2.11.1, not changed here).
-  `PicoDrive` preallocates the 32X memory, which makes those domains exist, only if the game has the gamedb option
-  `32X`, and no gamedb entry has it. Loaded that way, a 32X cartridge has `68K RAM`, `VRAM`, `Z80 RAM`, `CRAM`,
-  `VSRAM`, `MD CART` and `SRAM` only (seen in the smoke test), so Lua can't read SDRAM or the framebuffer. The test
-  ROMs are loaded with the option.
+- **`32X RAM` and `32X FB` domains:** stock 2.11.1 gives a 32X cartridge neither, so Lua can't read SDRAM or the
+  framebuffer there: `PicoDrive` preallocates the 32X memory, which makes those domains exist, only for the gamedb
+  option `32X`, and no gamedb entry has it. This branch also preallocates it for every game whose system is `32X`,
+  which is every cartridge EmuHawk runs on PicoDrive, so they have `68K RAM`, `VRAM`, `Z80 RAM`, `CRAM`, `VSRAM`,
+  `MD CART`, `32X RAM`, `32X FB` and `SRAM`. Emulation is unchanged: per-frame video, audio and 68K RAM hashes over
+  300 frames are identical with and without it, on both test ROMs; Mega Drive ROMs get no new domains.
 
 ## Savestates
 

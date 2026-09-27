@@ -88,7 +88,10 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 				(int)_syncSettings.SecondChoice << 4 |
 				(int)_syncSettings.ThirdChoice << 8);
 
-			if (!_core.Init(cd != null, game["32X"], regionAutoOrder, _syncSettings.RegionOverride))
+			// allocating the 32X memory up front is what makes the "32X RAM" and "32X FB" domains exist;
+			// it doesn't change emulation, and no gamedb entry has the option, so do it for every 32X game
+			var preinit32X = game["32X"] || game.System == VSystemID.Raw.Sega32X;
+			if (!_core.Init(cd != null, preinit32X, regionAutoOrder, _syncSettings.RegionOverride))
 				throw new InvalidOperationException("Core rejected the file!");
 
 			if (cd != null)

@@ -66,7 +66,9 @@ namespace BizHawk.Tests.PicoDriveHooks
 
 		/// <param name="corePath">a <c>picodrive.wbx.zst</c>, copied to the dll folder the core loads from</param>
 		/// <param name="preinit32X">the gamedb option <c>32X</c>, with which the 32X memory domains exist from the start</param>
-		public static Rig Load(string corePath, string romPath, bool preinit32X = true)
+		/// <param name="system">the game's system; by default <c>32X</c> for a <c>.32x</c> file and <c>GEN</c> otherwise, as EmuHawk sets it</param>
+		/// <param name="messages">gets the core's message boxes and on-screen messages</param>
+		public static Rig Load(string corePath, string romPath, bool preinit32X = true, string? system = null, Action<string>? messages = null)
 		{
 			var dest = Path.Combine(PathUtils.DllDirectoryPath, "picodrive.wbx.zst");
 			if (Path.GetFullPath(corePath) != Path.GetFullPath(dest))
@@ -78,14 +80,14 @@ namespace BizHawk.Tests.PicoDriveHooks
 			var game = new GameInfo
 			{
 				Name = Path.GetFileNameWithoutExtension(romPath),
-				System = is32X ? VSystemID.Raw.Sega32X : VSystemID.Raw.GEN,
+				System = system ?? (is32X ? VSystemID.Raw.Sega32X : VSystemID.Raw.GEN),
 			};
 			if (is32X && preinit32X)
 			{
 				game.AddOption("32X", "true");
 			}
 
-			var comm = new CoreComm(static _ => { }, static (_, _) => { }, new NoFirmware(), default, null!);
+			var comm = new CoreComm(m => messages?.Invoke(m), (m, _) => messages?.Invoke(m), new NoFirmware(), default, null!);
 			return new(new PicoDrive(comm, game, File.ReadAllBytes(romPath), deterministic: false, syncSettings: null));
 		}
 
@@ -120,8 +122,8 @@ namespace BizHawk.Tests.PicoDriveHooks
 				? Domains["32X RAM"]!.PeekUint(addr & 0x3FFFF, bigEndian: true)
 				: Domains["68K RAM"]!.PeekUint(addr & 0xFFFF, bigEndian: true);
 
-		/// <summary>a hash of the frame's video, audio and every writable memory domain</summary>
-		public ulong FrameHash()
+		/// <summary>a hash of the frame's video, audio and every writable memory domain, or the domains named</summary>
+		public ulong FrameHash(params string[] domains)
 		{
 			var h = 0xCBF29CE484222325UL;
 			void Add(byte b) => h = (h ^ b) * 0x100000001B3UL;
@@ -141,7 +143,7 @@ namespace BizHawk.Tests.PicoDriveHooks
 				Add((byte)(samples[i] >> 8));
 			}
 
-			foreach (var domain in Domains.Where(static d => d.Writable && d.Name is not "Waterbox PageData"))
+			foreach (var domain in Domains.Where(d => domains.Length is 0 ? d.Writable && d.Name is not "Waterbox PageData" : domains.Contains(d.Name)))
 			{
 				var buf = new byte[domain.Size];
 				domain.BulkPeekByte(0L.RangeToExclusive(domain.Size), buf);

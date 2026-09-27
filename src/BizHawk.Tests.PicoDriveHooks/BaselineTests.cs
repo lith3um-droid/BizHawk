@@ -66,6 +66,41 @@ namespace BizHawk.Tests.PicoDriveHooks
 			AssertSame($"{name}: address-less callbacks on all three scopes vs none", hooked, watched);
 		}
 
+		/// <summary>
+		/// Loaded as EmuHawk loads it (the system from the extension, no gamedb option), a 32X cartridge has the "32X RAM" and
+		/// "32X FB" domains and a Mega Drive one doesn't. Emulation is the same as with the 32X memory allocated late, which
+		/// is what 2.11.1 did for every 32X cartridge: the core gets that flag for a game whose system isn't <c>32X</c>.
+		/// </summary>
+		[TestMethod]
+		[DataRow("32x_hooks.32x")]
+		[DataRow("md_hooks.bin")]
+		public void ThirtyTwoXDomainsAsEmuHawkLoads(string name)
+		{
+			var rom = RomInfo.Read(name).Path;
+			var is32X = name.EndsWith(".32x");
+			List<ulong> Run(string? system, out string[] domains)
+			{
+				using var rig = Rig.Load(TestEnv.HookedCore, rom, preinit32X: false, system: system);
+				domains = [ .. rig.Domains.Select(static d => d.Name) ];
+				var ret = new List<ulong>();
+				for (var i = 0; i < HASH_FRAMES; i++)
+				{
+					rig.Frame();
+					ret.Add(rig.FrameHash("68K RAM"));
+				}
+
+				return ret;
+			}
+
+			var now = Run(system: null, out var domains);
+			var before = Run(system: VSystemID.Raw.GEN, out var domainsBefore);
+			Console.WriteLine($"{name}: domains {string.Join(", ", domains)}; with the flag off: {string.Join(", ", domainsBefore)}");
+			Assert.AreEqual(is32X, domains.Contains("32X RAM"), "32X RAM");
+			Assert.AreEqual(is32X, domains.Contains("32X FB"), "32X FB");
+			Assert.IsFalse(domainsBefore.Contains("32X RAM") || domainsBefore.Contains("32X FB"), "the flag off");
+			AssertSame($"{name}: video, audio and 68K RAM, as EmuHawk loads it vs the 32X memory allocated late", before, now);
+		}
+
 		/// <summary>Frames per second through the whole stack, on the 32X test ROM.</summary>
 		[TestMethod]
 		public void Speed()
