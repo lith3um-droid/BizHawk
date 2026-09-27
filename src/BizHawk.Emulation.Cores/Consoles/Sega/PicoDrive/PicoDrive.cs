@@ -10,7 +10,7 @@ using BizHawk.Emulation.DiscSystem;
 namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 {
 	[PortedCore(CoreNames.PicoDrive, "notaz", "0e35290", "https://github.com/notaz/picodrive")]
-	public class PicoDrive : WaterboxCore, IDriveLight, IRegionable, ISettable<object, PicoDrive.SyncSettings>
+	public partial class PicoDrive : WaterboxCore, IDriveLight, IRegionable, ISettable<object, PicoDrive.SyncSettings>
 	{
 		private readonly LibPicoDrive _core;
 		private readonly LibPicoDrive.CDReadCallback _cdcallback;
@@ -45,6 +45,7 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 			_syncSettings = syncSettings ?? new SyncSettings();
 
 			_cdcallback = CDRead;
+			_execCallback = ExecHook;
 
 			_core = PreInit<LibPicoDrive>(new WaterboxOptions
 			{
@@ -56,7 +57,7 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 				PlainHeapSizeKB = 64,
 				SkipCoreConsistencyCheck = comm.CorePreferences.HasFlag(CoreComm.CorePreferencesFlags.WaterboxCoreConsistencyCheck),
 				SkipMemoryConsistencyCheck = comm.CorePreferences.HasFlag(CoreComm.CorePreferencesFlags.WaterboxMemoryConsistencyCheck),
-			}, new Delegate[] { _cdcallback });
+			}, new Delegate[] { _cdcallback, _execCallback });
 
 			if (has32xBios)
 			{
@@ -112,6 +113,7 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 			ControllerDefinition = PicoDriveController;
 			DeterministicEmulation = deterministic;
 			_core.SetCDReadCallback(_cdcallback);
+			InitExecHooks();
 
 			_isPal = _core.IsPal();
 			VsyncNumerator = _isPal ? 53203424 : 53693175;
