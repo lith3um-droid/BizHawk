@@ -142,7 +142,7 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 				for (; i + 8 <= length; i += 8)
 				{
 					var x = *(ulong*)(p + i);
-					*(ulong*)(p + i) = (x & 0x00FF00FF00FF00FFUL) << 8 | (x >> 8 & 0x00FF00FF00FF00FFUL);
+					*(ulong*)(p + i) = (x & 0x00FF_00FF_00FF_00FFUL) << 8 | (x >> 8 & 0x00FF_00FF_00FF_00FFUL);
 				}
 
 				for (; i < length; i += 2)
