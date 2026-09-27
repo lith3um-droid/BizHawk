@@ -97,6 +97,11 @@ the address-less callback on that scope alone. `smoke_32x.lua` does so, one fram
 - **No stepping and no cycle count:** `CanStep` is false, and `Step`, `SetCpuRegister` and `TotalExecutedCycles`
   throw `NotImplementedException`.
 - A callback mustn't change emulation state. Adding and removing callbacks from inside one is fine.
+- **No `32X RAM` or `32X FB` domain when EmuHawk loads a 32X cartridge** (as in stock 2.11.1, not changed here).
+  `PicoDrive` preallocates the 32X memory, which makes those domains exist, only if the game has the gamedb option
+  `32X`, and no gamedb entry has it. Loaded that way, a 32X cartridge has `68K RAM`, `VRAM`, `Z80 RAM`, `CRAM`,
+  `VSRAM`, `MD CART` and `SRAM` only (seen in the smoke test), so Lua can't read SDRAM or the framebuffer. The test
+  ROMs are loaded with the option.
 
 ## Savestates
 

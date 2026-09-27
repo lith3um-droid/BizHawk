@@ -24,6 +24,8 @@ namespace BizHawk.Tests.PicoDriveHooks
 			using var rig = Rig.Load(TestEnv.HookedCore, romPath, preinit32X: false);
 
 			// 1. the entry points, as memory.read_u32_be(0x3E0, "MD CART") reads them
+			// loaded as EmuHawk loads it, the 32X domains exist only if the gamedb gives the game the option "32X"
+			Console.WriteLine($"memory domains: {string.Join(", ", rig.Domains.Select(static d => d.Name))}");
 			var cart = rig.Domains["MD CART"]!;
 			var master = cart.PeekUint(0x3E0, bigEndian: true);
 			var slave = cart.PeekUint(0x3E4, bigEndian: true);
