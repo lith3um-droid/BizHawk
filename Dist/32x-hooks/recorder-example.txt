@@ -1,0 +1,42 @@
+# PicoDrive call recorder: an example config file. See docs/32x-hooks.md, "Call recorder".
+# The environment variable PICODRIVE_CALL_RECORDER names this file (record.bat sets it), and the core reads it when
+# the game loads. A mistake turns the recorder off, with a message box listing each line that's wrong.
+# '#' starts a comment. Numbers: hex as 0x... or $..., otherwise decimal.
+# Every address below is a placeholder: put in your own.
+
+# 1. Find the routines worth recording: count call targets, then read discover-m68k.txt and discover-sh2m.txt in the
+#    output folder, busiest first (target, calls, distinct call sites). For the first <frames> frames of the window,
+#    discover watches every instruction of that CPU, which is slower. Run it on its own first.
+# discover <m68k|sh2m|sh2s> <frames>
+#discover m68k 600
+#discover sh2m 60
+
+# 2. Record them: registers and regions at entry, and again when the routine returns.
+# routine <m68k|sh2m|sh2s> <address> [name] [regions=label,...]
+#   m68k: the main 68000, 24-bit addresses; once the 32X is on, cartridge code usually runs from the $880000 mirror.
+#   sh2m, sh2s: the master and slave SH-2, the address as executed: 0x06... (cached) and 0x26... (cache-through) are
+#   different aliases of SDRAM, 0x02... and 0x22... of the cartridge. Record the one the code runs from.
+#   The name names the output file (default: cpu_address, e.g. m68k_00880ABC). Without regions=, every region.
+routine m68k $880ABC  objects_update   regions=objects
+routine m68k $881234  draw_list        regions=objects,sprites
+routine sh2m 0x06004000 sh2_render     regions=commands
+routine sh2s 0x06006000 sh2s_helper
+
+# region <domain> <start> <length> <label>: memory captured at entry and at return. The domain is a BizHawk memory
+# domain ("68K RAM", "32X RAM", "32X FB", "VRAM", "CRAM", "VSRAM", "Z80 RAM", "MD CART", "SRAM"), the start is an
+# offset in it, and the bytes are as the domain shows them (the CPUs' big-endian order for RAM).
+region 68K RAM 0xD000 0x1000 objects       # 68K RAM starts at $FF0000: this is $FFD000-$FFDFFF
+region VRAM 0xF800 0x280 sprites           # the sprite table, if the game keeps it there
+region 32X RAM 0x3F000 0x800 commands      # 32X RAM (SDRAM) is 0x06000000 on the SH-2s: this is 0x0603F000-0x0603F7FF
+#region 68K RAM 0 0x10000 ram              # all of 68K RAM: 128 KB per call (entry and exit), mind maxcalls
+
+# frames <first> <last>: record these frames only, inclusive. The first frame after power-on is 0; EmuHawk's frame
+# counter shows the number of the next frame to run. Default: from frame 0 until the game is closed.
+frames 300 1799
+
+# maxcalls <n>: stop recording a routine after n calls (default 1000); index.json says which ones stopped.
+maxcalls 1000
+
+# out <folder>: where the files go, relative to this file (default: calls). Each time the core starts (loading the
+# game, starting a movie, rebooting the core) the recorder starts over and overwrites the files there.
+out calls
