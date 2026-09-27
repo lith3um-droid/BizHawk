@@ -5,5 +5,6 @@ CCFLAGS := -I. \
 	-DLSB_FIRST -DNDEBUG -DEMU_F68K -D_USE_CZ80
 
 TARGET := picodrive.wbx
-SRCS = $(shell find $(ROOT_DIR) -type f -name '*.c')
+# hooktest/ is a native test harness, not part of the core
+SRCS = $(shell find $(ROOT_DIR) -type f -name '*.c' -not -path '$(ROOT_DIR)/hooktest/*')
 include ../common.mak
