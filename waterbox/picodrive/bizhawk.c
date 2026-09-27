@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -8,6 +9,7 @@
 #include "pico/pico.h"
 #include "pico/pico_int.h"
 #include "pico/cd/cdd.h"
+#include "bizhawk_hooks.h"
 
 void lprintf(const char *fmt, ...)
 {
@@ -292,6 +294,200 @@ ECL_EXPORT int IsPal(void)
 ECL_EXPORT int Is32xActive(void)
 {
 	return !!(PicoAHW & PAHW_32X);
+}
+
+// Execute callbacks and CPU registers, for BizHawk's debugging API.
+//
+// All of this state is ECL_INVISIBLE, so savestates leave it out and loading
+// one keeps the current callback and watch lists. The CPU cores test
+// biz_exec_hook_on[cpu] before each instruction and call in here only when it
+// is set: while there is a callback and that CPU watches something.
+
+#define BIZ_WATCH_MAX 4096 // exact addresses per CPU; more turn on watch-all
+
+typedef struct
+{
+	int watch_all; // report every instruction
+	int count;
+	uint32_t addrs[BIZ_WATCH_MAX]; // sorted, no duplicates
+	// bit (addr >> 1) & 0xffff is set when some address in addrs has those bits
+	uint8_t filter[0x10000 / 8];
+} BizWatchList;
+
+ECL_INVISIBLE unsigned char biz_exec_hook_on[BIZ_CPU_COUNT];
+ECL_INVISIBLE static BizWatchList biz_exec_watch[BIZ_CPU_COUNT];
+ECL_INVISIBLE static void (*biz_exec_cb)(int cpu, uint32_t addr, uint32_t opcode);
+// while a callback runs: its cpu + 1, and the PC and SR of the instruction
+ECL_INVISIBLE static int biz_cb_cpu;
+ECL_INVISIBLE static uint32_t biz_cb_pc, biz_cb_sr;
+
+static int biz_watch_match(const BizWatchList *w, uint32_t addr)
+{
+	int lo, hi;
+
+	if (w->watch_all)
+		return 1;
+	if (!(w->filter[addr >> 4 & 0x1fff] & 1 << (addr >> 1 & 7)))
+		return 0;
+	lo = 0;
+	hi = w->count;
+	while (lo < hi)
+	{
+		int mid = (lo + hi) >> 1;
+		if (w->addrs[mid] < addr)
+			lo = mid + 1;
+		else
+			hi = mid;
+	}
+	return lo < w->count && w->addrs[lo] == addr;
+}
+
+static void biz_call_exec(int cpu, uint32_t pc, uint32_t sr, uint32_t opcode)
+{
+	void (*cb)(int, uint32_t, uint32_t) = biz_exec_cb;
+
+	if (!cb)
+		return;
+	biz_cb_cpu = cpu + 1;
+	biz_cb_pc = pc;
+	biz_cb_sr = sr;
+	cb(cpu, pc, opcode);
+	biz_cb_cpu = 0;
+}
+
+void biz_m68k_exec_hook(unsigned int pc, unsigned int sr, unsigned int opcode)
+{
+	// the Sega CD sub CPU runs through the same code
+	if (g_m68kcontext != &PicoCpuFM68k)
+		return;
+	pc &= 0xffffff;
+	if (biz_watch_match(&biz_exec_watch[BIZ_CPU_M68K], pc))
+		biz_call_exec(BIZ_CPU_M68K, pc, sr & 0xffff, opcode & 0xffff);
+}
+
+void biz_sh2_exec_hook(SH2 *sh2, unsigned int opcode)
+{
+	int cpu = sh2->is_slave ? BIZ_CPU_SSH2 : BIZ_CPU_MSH2;
+
+	if (biz_watch_match(&biz_exec_watch[cpu], sh2->ppc))
+		biz_call_exec(cpu, sh2->ppc, 0, opcode & 0xffff);
+}
+
+static void biz_update_exec_hooks(void)
+{
+	int cpu;
+
+	for (cpu = 0; cpu < BIZ_CPU_COUNT; cpu++)
+	{
+		const BizWatchList *w = &biz_exec_watch[cpu];
+		biz_exec_hook_on[cpu] = biz_exec_cb && (w->watch_all || w->count);
+	}
+}
+
+// The callback runs before each watched instruction, with the CPU id
+// (0 = 68000, 1 = master SH-2, 2 = slave SH-2), the instruction's address and
+// its first opcode word. It must not change emulation state. NULL turns all
+// execute hooks off; the watch lists are kept.
+ECL_EXPORT void SetExecCallback(void (*callback)(int cpu, uint32_t addr, uint32_t opcode))
+{
+	biz_exec_cb = callback;
+	biz_update_exec_hooks();
+}
+
+static int biz_cmp_u32(const void *a, const void *b)
+{
+	uint32_t x = *(const uint32_t *)a;
+	uint32_t y = *(const uint32_t *)b;
+	return x < y ? -1 : x > y;
+}
+
+// Replaces one CPU's watch list: the callback runs for instructions at one of
+// the count addresses, or for every instruction if watchAll is nonzero.
+// 68000 addresses are masked to 24 bits; SH-2 addresses are compared in full,
+// so the cached and cache-through aliases are different addresses.
+// Returns 0 if nothing is watched, 1 for a list, 2 for watch-all (also used
+// when there are more than BIZ_WATCH_MAX addresses), -1 for a bad cpu.
+ECL_EXPORT int SetExecWatchList(int cpu, const uint32_t *addrs, int count, int watchAll)
+{
+	BizWatchList *w;
+	int i, n;
+
+	if (cpu < 0 || cpu >= BIZ_CPU_COUNT)
+		return -1;
+	w = &biz_exec_watch[cpu];
+	memset(w->filter, 0, sizeof(w->filter));
+	w->count = 0;
+	w->watch_all = watchAll || count > BIZ_WATCH_MAX;
+	if (!w->watch_all && addrs && count > 0)
+	{
+		for (i = 0; i < count; i++)
+			w->addrs[i] = cpu == BIZ_CPU_M68K ? addrs[i] & 0xffffff : addrs[i];
+		qsort(w->addrs, count, sizeof(w->addrs[0]), biz_cmp_u32);
+		for (i = n = 0; i < count; i++)
+		{
+			if (n == 0 || w->addrs[i] != w->addrs[n - 1])
+				w->addrs[n++] = w->addrs[i];
+		}
+		for (i = 0; i < n; i++)
+			w->filter[w->addrs[i] >> 4 & 0x1fff] |= 1 << (w->addrs[i] >> 1 & 7);
+		w->count = n;
+	}
+	biz_update_exec_hooks();
+	return w->watch_all ? 2 : w->count ? 1 : 0;
+}
+
+// Writes one CPU's registers to out and returns how many:
+//   68000, 20 values: D0-D7, A0-A7, PC, SR, USP, SSP
+//   SH-2,  23 values: R0-R15, PC, PR, SR, GBR, VBR, MACH, MACL
+// Inside an execute callback for that CPU, PC is the reported instruction's
+// address. Returns 0 for a bad cpu.
+ECL_EXPORT int GetRegisters(int cpu, uint32_t *out)
+{
+	int i;
+
+	if (cpu == BIZ_CPU_M68K)
+	{
+		const M68K_CONTEXT *c = &PicoCpuFM68k;
+		uint32_t pc, sr;
+
+		for (i = 0; i < 8; i++)
+		{
+			out[i] = c->dreg[i].D;
+			out[8 + i] = c->areg[i].D;
+		}
+		if (biz_cb_cpu == BIZ_CPU_M68K + 1)
+		{
+			pc = biz_cb_pc;
+			sr = biz_cb_sr;
+		}
+		else
+		{
+			pc = fm68k_get_pc(&PicoCpuFM68k) & 0xffffff;
+			sr = fm68k_get_sr(&PicoCpuFM68k) & 0xffff;
+		}
+		out[16] = pc;
+		out[17] = sr;
+		// A7 is the active stack pointer, FAME keeps the other one in asp
+		out[18] = sr & 0x2000 ? c->asp : c->areg[7].D;
+		out[19] = sr & 0x2000 ? c->areg[7].D : c->asp;
+		return 20;
+	}
+	if (cpu == BIZ_CPU_MSH2 || cpu == BIZ_CPU_SSH2)
+	{
+		const SH2 *sh2 = &sh2s[cpu - BIZ_CPU_MSH2];
+
+		for (i = 0; i < 16; i++)
+			out[i] = sh2->r[i];
+		out[16] = biz_cb_cpu == cpu + 1 ? biz_cb_pc : sh2->pc;
+		out[17] = sh2->pr;
+		out[18] = sh2->sr & 0x3f3;
+		out[19] = sh2->gbr;
+		out[20] = sh2->vbr;
+		out[21] = sh2->mach;
+		out[22] = sh2->macl;
+		return 23;
+	}
+	return 0;
 }
 
 int main(void)

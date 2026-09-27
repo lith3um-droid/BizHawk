@@ -16,6 +16,7 @@
 #endif
 
 #include "fame.h"
+#include "../../bizhawk_hooks.h"
 
 
 // Options //
@@ -264,8 +265,16 @@ typedef signed int	s32;
 #define ROR_32(A, C)    (LSR_32(A, C) | LSL_32(A, 32-(C)))
 #define ROR_33(A, C)    (LSR_32(A, C) | LSL_32(A, 33-(C)))
 
+// BizHawk execute hook: report the instruction at PC before it is fetched.
+// The live PC and flags are passed along, since in the computed goto mode
+// they are locals of fm68k_emulate().
+#define BIZ_EXEC_HOOK \
+    if (BIZ_UNLIKELY(biz_exec_hook_on[BIZ_CPU_M68K])) \
+        biz_m68k_exec_hook(GET_PC, GET_SR, *PC);
+
 #ifndef FAMEC_NO_GOTOS
 #define NEXT                    \
+    BIZ_EXEC_HOOK               \
     FETCH_WORD(Opcode);         \
     goto *JumpTable[Opcode];
 
@@ -289,6 +298,7 @@ typedef signed int	s32;
 
 #define NEXT \
     do{ \
+    	BIZ_EXEC_HOOK \
     	FETCH_WORD(Opcode); \
     	JumpTable[Opcode](); \
     }while(m68kcontext.io_cycle_counter>0);
@@ -718,6 +728,15 @@ u32 fm68k_get_pc(M68K_CONTEXT *context)
 #else
 	return context->pc; // approximate PC in this mode
 #endif
+}
+
+u32 fm68k_get_sr(M68K_CONTEXT *context)
+{
+#ifdef FAMEC_NO_GOTOS
+	if ((context->execinfo & M68K_RUNNING) && context == g_m68kcontext)
+		return GET_SR;
+#endif
+	return context->sr; // as of the last fm68k_emulate() exit in goto mode
 }
 
 

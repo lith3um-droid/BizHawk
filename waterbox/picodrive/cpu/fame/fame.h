@@ -156,6 +156,7 @@ int  fm68k_emulate(int n, int idle_mode);
 int  fm68k_would_interrupt(void); // to be called from fm68k_emulate()
 
 unsigned fm68k_get_pc(M68K_CONTEXT *context);
+unsigned fm68k_get_sr(M68K_CONTEXT *context);
 
 
 #ifdef __cplusplus
