@@ -46,4 +46,7 @@ Environment variables:
   counter's increment in the recorded memory; discover mode; emulation and the execute callbacks unchanged while
   recording; config errors; frames per second; and the bookkeeping of nested, recursive, abandoned and tail calls
   against a made-up CPU.
-- `SmokeTest`: what `Dist/32x-hooks/smoke_32x.lua` does, on the cartridge `BIZHAWK_32X_SMOKE_ROM` names.
+- `SmokeTest`: what `Dist/32x-hooks/smoke_32x.lua` does, on the cartridge `BIZHAWK_32X_SMOKE_ROM` names; and
+  `RecorderSmoke`, the call recorder on that cartridge with the config file `PICODRIVE_RECORDER_SMOKE_CONFIG` names, for
+  `PICODRIVE_RECORDER_SMOKE_FRAMES` frames (600 by default), with the frames per second with and without it. Keep that
+  config file and its output outside the repository.

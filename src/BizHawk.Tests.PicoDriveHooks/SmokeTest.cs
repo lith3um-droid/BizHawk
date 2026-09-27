@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -81,6 +82,38 @@ namespace BizHawk.Tests.PicoDriveHooks
 			callbacks.ForEach(rig.Remove);
 			Console.WriteLine($"frame {rig.Core.Frame - 1}: all three scopes at once, each callback counted {string.Join(' ', all)}");
 			Assert.IsTrue(all.All(n => n == all[0]));
+		}
+
+		/// <summary>
+		/// Opt-in: the call recorder on the cartridge, with the config file <c>PICODRIVE_RECORDER_SMOKE_CONFIG</c> names,
+		/// for <c>PICODRIVE_RECORDER_SMOKE_FRAMES</c> frames (default 600), and the same frames without it: the frames per
+		/// second, and the recorder's output folder, which <c>Dist/32x-hooks/pdcr.py summary</c> reads.
+		/// </summary>
+		[TestMethod]
+		public void RecorderSmoke()
+		{
+			var romPath = TestEnv.Need(TestEnv.SmokeRom, "BIZHAWK_32X_SMOKE_ROM");
+			var config = TestEnv.Need(Environment.GetEnvironmentVariable("PICODRIVE_RECORDER_SMOKE_CONFIG"), "PICODRIVE_RECORDER_SMOKE_CONFIG");
+			var frames = int.Parse(Environment.GetEnvironmentVariable("PICODRIVE_RECORDER_SMOKE_FRAMES") ?? "600");
+			foreach (var on in new[] { false, true })
+			{
+				Environment.SetEnvironmentVariable("PICODRIVE_CALL_RECORDER", on ? config : null);
+				Rig rig;
+				try
+				{
+					rig = Rig.Load(TestEnv.HookedCore, romPath, preinit32X: false, messages: Console.WriteLine);
+				}
+				finally
+				{
+					Environment.SetEnvironmentVariable("PICODRIVE_CALL_RECORDER", null);
+				}
+
+				var sw = Stopwatch.StartNew();
+				rig.Frames(frames);
+				var fps = frames / sw.Elapsed.TotalSeconds;
+				rig.Dispose();
+				Console.WriteLine($"recorder {(on ? "on" : "off")}: {frames} frames in {sw.Elapsed.TotalSeconds:F1} s, {fps:F1} fps");
+			}
 		}
 	}
 }
