@@ -13,6 +13,8 @@ HERE := $(patsubst %/,%,$(dir $(realpath $(lastword $(MAKEFILE_LIST)))))
 CC := clang
 CORE ?= $(realpath $(HERE)/..)
 OUT ?= $(HERE)/build/$(CC)
+# absolute, so that the dependency files name the same targets as the rules
+override OUT := $(abspath $(OUT))
 
 SRCS := $(shell find $(CORE) -type f -name '*.c' -not -path '*/hooktest/*')
 OBJS := $(patsubst $(CORE)/%.c,$(OUT)/obj/%.o,$(SRCS)) $(OUT)/obj/harness.o
