@@ -90,6 +90,16 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 
 		private void ExecHook(int cpu, uint addr, uint opcode)
 		{
+			if (_recorder is not null)
+			{
+				_recorder.OnExec(cpu, addr, opcode);
+				// the recorder's hits aren't the callbacks' (an address-less callback gets every hit of every scope)
+				if (!_callbacksWatchAll[cpu] && !_callbacksWatch[cpu].Contains(addr))
+				{
+					return;
+				}
+			}
+
 			if (_memoryCallbacks.HasExecutes)
 			{
 				const uint flags = (uint)MemoryCallbackFlags.AccessExecute;
@@ -156,26 +166,42 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 		/// <summary>
 		/// Sends one CPU's execute callbacks to the core: their exact addresses if every one has an address and a full mask,
 		/// or else every instruction, which leaves the matching to <see cref="MemoryCallbackSystem.CallMemoryCallbacks"/>.
+		/// With the call recorder, the list is the union of the callbacks' and the recorder's.
 		/// </summary>
 		private void RefreshExecWatchList(int cpu)
 		{
 			// the core reports the 68000's addresses in 24 bits
 			var fullMask = cpu == (int)LibPicoDrive.Cpu.M68K ? 0xFFFFFFU : 0xFFFFFFFFU;
 			var callbacks = _execCallbacks[cpu];
-			var addrs = new uint[callbacks.Count];
-			for (var i = 0; i < addrs.Length; i++)
+			var addrs = new List<uint>(callbacks.Count);
+			var watchAll = false;
+			foreach (var callback in callbacks)
 			{
-				var callback = callbacks[i];
 				if (callback.Address is not uint addr || ((callback.AddressMask ?? uint.MaxValue) & fullMask) != fullMask)
 				{
-					_hooks.SetExecWatchList(cpu, null, 0, watchAll: true);
-					return;
+					watchAll = true;
+					break;
 				}
 
-				addrs[i] = addr & fullMask;
+				addrs.Add(addr & fullMask);
 			}
 
-			_hooks.SetExecWatchList(cpu, addrs, addrs.Length, watchAll: false);
+			if (_recorder is not null)
+			{
+				_callbacksWatchAll[cpu] = watchAll;
+				_callbacksWatch[cpu] = [ .. addrs ];
+				watchAll |= _recorder.WatchesAll(cpu);
+				addrs.AddRange(_recorder.WatchList(cpu));
+			}
+
+			if (watchAll)
+			{
+				_hooks.SetExecWatchList(cpu, null, 0, watchAll: true);
+			}
+			else
+			{
+				_hooks.SetExecWatchList(cpu, [ .. addrs ], addrs.Count, watchAll: false);
+			}
 		}
 	}
 }

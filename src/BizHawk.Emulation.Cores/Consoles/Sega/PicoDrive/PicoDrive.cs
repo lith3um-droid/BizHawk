@@ -118,6 +118,7 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 			DeterministicEmulation = deterministic;
 			_core.SetCDReadCallback(_cdcallback);
 			InitExecHooks();
+			InitCallRecorder(comm, game.Name);
 
 			_isPal = _core.IsPal();
 			VsyncNumerator = _isPal ? 53203424 : 53693175;
@@ -147,6 +148,7 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 
 		protected override LibWaterboxCore.FrameInfo FrameAdvancePrep(IController controller, bool render, bool rendersound)
 		{
+			_recorder?.BeginFrame(Frame);
 			var b = 0;
 			var v = 1;
 			foreach (var s in ButtonOrders)
@@ -219,9 +221,19 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 			}
 		}
 
+		protected override void FrameAdvancePost()
+			=> _recorder?.EndFrame(Frame);
+
 		protected override void LoadStateBinaryInternal(BinaryReader reader)
 		{
 			_core.SetCDReadCallback(_cdcallback);
+			_recorder?.StateLoaded();
+		}
+
+		public override void Dispose()
+		{
+			DisposeCallRecorder();
+			base.Dispose();
 		}
 
 		[CoreSettings]

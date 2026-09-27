@@ -38,5 +38,12 @@ Environment variables:
   counters in RAM, and aliases that must not fire; address-less callbacks counting a frame's instructions per CPU;
   removing callbacks; a savestate round trip.
 - `BaselineTests`: per-frame hashes of video, audio and all writable memory against the baseline core, and with every
-  instruction watched; frames per second; savestates across cores.
+  instruction watched; the 32X memory domains of a cartridge loaded as EmuHawk loads it; frames per second; savestates
+  across cores.
+- `CallRecorderTests`: the call recorder (`PICODRIVE_CALL_RECORDER`, see `docs/32x-hooks.md`), which the tests turn on
+  with a config file of their own in `test_output/picodrive-hooks/recorder/`: calls of the routines on all three CPUs
+  against the routines' counters in RAM, with the caller's and the routine's registers, the return address and the
+  counter's increment in the recorded memory; discover mode; emulation and the execute callbacks unchanged while
+  recording; config errors; frames per second; and the bookkeeping of nested, recursive, abandoned and tail calls
+  against a made-up CPU.
 - `SmokeTest`: what `Dist/32x-hooks/smoke_32x.lua` does, on the cartridge `BIZHAWK_32X_SMOKE_ROM` names.
