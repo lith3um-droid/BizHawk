@@ -397,9 +397,9 @@ jumps through one shared hook block.
 | discover on the master | 204 | | |
 
 Unset, the recorder is not created, and the speed is that of the core with no callbacks (533 fps in the same run).
-Recording costs about 0.5 microseconds a call plus the copying and writing of its regions, twice: with all of 68K
-RAM, 131 KB a call, the disk is the limit (the slowest run, 17 fps, is the page cache flushing), so keep `maxcalls`
-low for big regions. Discover costs about the same as an address-less callback on that CPU alone.
+With small regions, a recorded call costs about 2 microseconds, besides the watches themselves (see above); big
+regions are copied and written twice a call: with all of 68K RAM, 131 KB a call, the disk is the limit (the slowest
+run, 17 fps, is the page cache flushing), so keep `maxcalls` low for big regions.
 
 Knuckles' Chaotix, 600 frames from power-on, fps without and with the recorder (the same run each):
 
