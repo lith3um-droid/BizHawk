@@ -387,19 +387,19 @@ three callbacks each.
 In the gcc mode, which BizHawk doesn't ship, the idle hook costs about 9 %: FAME/C's computed-goto dispatch
 jumps through one shared hook block.
 
-**Call recorder**, full stack, 32X test ROM (`RecorderSpeed`), 5 runs, median fps:
+**Call recorder**, full stack, 32X test ROM (`RecorderSpeed`), median fps of 5 runs, in two runs of the test:
 
 | configuration | fps | calls per frame | written |
 |---|---|---|---|
-| recorder off (variable unset) | 527-542 | | |
-| 5 routines on the three CPUs, 32 bytes each | 369 | 444 | 170 MB in 1,510 frames |
-| `sub68` with all 64 KB of 68K RAM | 101 (17-120) | 106 | 485 MB in 35 frames |
-| discover on the master | 204 | | |
+| recorder off (variable unset) | 527-538 | | |
+| 5 routines on the three CPUs, 32 bytes each | 321-369 | 444 | 170 MB in 1,510 frames |
+| `sub68` with all 64 KB of 68K RAM | 16-101 | 106 | 485 MB in 35 frames |
+| discover on the master | 191-204 | | |
 
 Unset, the recorder is not created, and the speed is that of the core with no callbacks (533 fps in the same run).
 With small regions, a recorded call costs about 2 microseconds, besides the watches themselves (see above); big
-regions are copied and written twice a call: with all of 68K RAM, 131 KB a call, the disk is the limit (the slowest
-run, 17 fps, is the page cache flushing), so keep `maxcalls` low for big regions.
+regions are copied and written twice a call: with all of 68K RAM, 131 KB a call, the disk is the limit (the 16 fps
+is the page cache flushing, the 101 fps what copying costs), so keep `maxcalls` low for big regions.
 
 Knuckles' Chaotix, 600 frames from power-on, fps without and with the recorder (the same run each):
 
