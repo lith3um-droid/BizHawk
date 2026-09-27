@@ -34,7 +34,7 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 		private readonly LibPicoDrive.ExecCallback _execCallback;
 
 		/// <summary>null if the core file predates the hooks: then there are no memory callbacks or registers</summary>
-		private readonly LibPicoDrive.Hooks _hooks;
+		private readonly LibPicoDriveHooks _hooks;
 
 		/// <summary>
 		/// the execute callbacks of each CPU's scope, kept from <see cref="MemoryCallbackSystem.CallbackAdded"/> and
@@ -98,13 +98,13 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 		}
 
 		/// <returns>the hook exports, or null if the core file predates them</returns>
-		private LibPicoDrive.Hooks BindHooks()
+		private LibPicoDriveHooks BindHooks()
 		{
 			using (_exe.EnterExit())
 			{
-				return _exe.GetProcAddrOrZero(nameof(LibPicoDrive.Hooks.GetRegisters)) == IntPtr.Zero
+				return _exe.GetProcAddrOrZero(nameof(LibPicoDriveHooks.GetRegisters)) == IntPtr.Zero
 					? null
-					: BizInvoker.GetInvoker<LibPicoDrive.Hooks>(_exe, _exe, _adapter);
+					: BizInvoker.GetInvoker<LibPicoDriveHooks>(_exe, _exe, _adapter);
 			}
 		}
 
