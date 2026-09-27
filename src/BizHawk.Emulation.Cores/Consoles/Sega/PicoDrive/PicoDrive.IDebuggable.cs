@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 
+using BizHawk.BizInvoke;
+using BizHawk.Common;
 using BizHawk.Emulation.Common;
 
 namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
@@ -31,6 +33,9 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 
 		private readonly LibPicoDrive.ExecCallback _execCallback;
 
+		/// <summary>null if the core file predates the hooks: then there are no memory callbacks or registers</summary>
+		private readonly LibPicoDrive.Hooks _hooks;
+
 		/// <summary>
 		/// the execute callbacks of each CPU's scope, kept from <see cref="MemoryCallbackSystem.CallbackAdded"/> and
 		/// <see cref="MemoryCallbackSystem.CallbackRemoved"/>, which can't enumerate the callback system while it changes
@@ -39,13 +44,18 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 
 		public IDictionary<string, RegisterValue> GetCpuFlagsAndRegisters()
 		{
+			if (_hooks is null)
+			{
+				throw new NotImplementedException();
+			}
+
 			// all three CPUs, even without the 32X (the SH-2s are then all zeros), so the names are always the same
 			var ret = new Dictionary<string, RegisterValue>();
 			var regs = new uint[LibPicoDrive.MAX_REGISTERS];
 			for (var cpu = 0; cpu < CpuRegisterNames.Length; cpu++)
 			{
 				var names = CpuRegisterNames[cpu];
-				var n = _core.GetRegisters(cpu, regs);
+				var n = _hooks.GetRegisters(cpu, regs);
 				if (n != names.Length)
 				{
 					throw new InvalidOperationException($"The core returned {n} registers for {CpuScopes[cpu]}, not {names.Length}");
@@ -64,7 +74,9 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 		public void SetCpuRegister(string register, int value)
 			=> throw new NotImplementedException();
 
-		public IMemoryCallbackSystem MemoryCallbacks => _memoryCallbacks;
+#pragma warning disable CA1065 // like GPGX's, a conditional [FeatureNotImplemented], for which the convention is to throw NIE
+		public IMemoryCallbackSystem MemoryCallbacks => _hooks is null ? throw new NotImplementedException() : _memoryCallbacks;
+#pragma warning restore CA1065
 
 		public bool CanStep(StepType type) => false;
 
@@ -85,16 +97,32 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 			}
 		}
 
+		/// <returns>the hook exports, or null if the core file predates them</returns>
+		private LibPicoDrive.Hooks BindHooks()
+		{
+			using (_exe.EnterExit())
+			{
+				return _exe.GetProcAddrOrZero(nameof(LibPicoDrive.Hooks.GetRegisters)) == IntPtr.Zero
+					? null
+					: BizInvoker.GetInvoker<LibPicoDrive.Hooks>(_exe, _exe, _adapter);
+			}
+		}
+
 		/// <remarks>
 		/// The callback and the watch lists are invisible to savestates, so they are set once, here and when callbacks change,
 		/// and loading a state keeps them.
 		/// </remarks>
 		private void InitExecHooks()
 		{
+			if (_hooks is null)
+			{
+				return;
+			}
+
 			_memoryCallbacks.CallbackAdded += OnMemoryCallbackAdded;
 			_memoryCallbacks.CallbackRemoved += OnMemoryCallbackRemoved;
 			_memoryCallbacks.ActiveChanged += RefreshExecWatchLists;
-			_core.SetExecCallback(_execCallback);
+			_hooks.SetExecCallback(_execCallback);
 			RefreshExecWatchLists();
 		}
 
@@ -140,14 +168,14 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 				var callback = callbacks[i];
 				if (callback.Address is not uint addr || ((callback.AddressMask ?? uint.MaxValue) & fullMask) != fullMask)
 				{
-					_core.SetExecWatchList(cpu, null, 0, watchAll: true);
+					_hooks.SetExecWatchList(cpu, null, 0, watchAll: true);
 					return;
 				}
 
 				addrs[i] = addr & fullMask;
 			}
 
-			_core.SetExecWatchList(cpu, addrs, addrs.Length, watchAll: false);
+			_hooks.SetExecWatchList(cpu, addrs, addrs.Length, watchAll: false);
 		}
 	}
 }

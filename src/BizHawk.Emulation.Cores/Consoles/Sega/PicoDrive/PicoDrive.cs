@@ -58,6 +58,7 @@ namespace BizHawk.Emulation.Cores.Consoles.Sega.PicoDrive
 				SkipCoreConsistencyCheck = comm.CorePreferences.HasFlag(CoreComm.CorePreferencesFlags.WaterboxCoreConsistencyCheck),
 				SkipMemoryConsistencyCheck = comm.CorePreferences.HasFlag(CoreComm.CorePreferencesFlags.WaterboxMemoryConsistencyCheck),
 			}, new Delegate[] { _cdcallback, _execCallback });
+			_hooks = BindHooks();
 
 			if (has32xBios)
 			{
