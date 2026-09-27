@@ -265,16 +265,21 @@ typedef signed int	s32;
 #define ROR_32(A, C)    (LSR_32(A, C) | LSL_32(A, 32-(C)))
 #define ROR_33(A, C)    (LSR_32(A, C) | LSL_32(A, 33-(C)))
 
-// BizHawk execute hook: report the instruction at PC before it is fetched.
-// The live PC and flags are passed along, since in the computed goto mode
-// they are locals of fm68k_emulate().
-#define BIZ_EXEC_HOOK \
-    if (BIZ_UNLIKELY(biz_exec_hook_on[BIZ_CPU_M68K])) \
+// BizHawk execute hook: report the instruction at PC before it is fetched,
+// if the hook is on and the address passes the filter. The live PC and
+// flags are passed along, since in the computed goto mode they are locals of
+// fm68k_emulate().
+#define BIZ_EXEC_HOOK_ON \
+    BIZ_UNLIKELY(biz_exec_hook_on[BIZ_CPU_M68K])
+#define BIZ_EXEC_HOOK_CALL \
+    if (BIZ_EXEC_FILTER(biz_exec_filter[BIZ_CPU_M68K], GET_PC)) \
         biz_m68k_exec_hook(GET_PC, GET_SR, *PC);
 
 #ifndef FAMEC_NO_GOTOS
+// every opcode ends in NEXT here, so they share one block for the hook
 #define NEXT                    \
-    BIZ_EXEC_HOOK               \
+    if (BIZ_EXEC_HOOK_ON)       \
+        goto famec_Exec_Hook;   \
     FETCH_WORD(Opcode);         \
     goto *JumpTable[Opcode];
 
@@ -298,7 +303,9 @@ typedef signed int	s32;
 
 #define NEXT \
     do{ \
-    	BIZ_EXEC_HOOK \
+    	if (BIZ_EXEC_HOOK_ON) { \
+    		BIZ_EXEC_HOOK_CALL \
+    	} \
     	FETCH_WORD(Opcode); \
     	JumpTable[Opcode](); \
     }while(m68kcontext.io_cycle_counter>0);
@@ -924,6 +931,11 @@ famec_Exec:
 	NEXT
 
 #ifndef FAMEC_NO_GOTOS
+
+famec_Exec_Hook:
+	BIZ_EXEC_HOOK_CALL
+	FETCH_WORD(Opcode);
+	goto *JumpTable[Opcode];
 
 #define OPCODE(N_OP) OP_##N_OP:
 #define CAST_OP(N_OP) (opcode_func)&&OP_##N_OP

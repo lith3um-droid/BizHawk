@@ -1,5 +1,4 @@
 #include "../sh2.h"
-#include "../../../bizhawk_hooks.h"
 
 #ifdef DRC_CMP
 #include "../compiler.c"
@@ -108,9 +107,12 @@ static unsigned int op_refs[0x10000];
 
 #ifndef DRC_CMP
 
+#ifdef SH2_BIZHOOK
+int sh2_execute_interpreter_bizhook(SH2 *sh2, int cycles)
+#else
 int sh2_execute_interpreter(SH2 *sh2, int cycles)
+#endif
 {
-	const unsigned char *hook_on = &biz_exec_hook_on[BIZ_CPU_MSH2 + sh2->is_slave];
 	UINT32 opcode;
 
 	sh2->icount = cycles;
@@ -135,9 +137,11 @@ int sh2_execute_interpreter(SH2 *sh2, int cycles)
 		sh2->delay = 0;
 		sh2->pc += 2;
 
-		// BizHawk execute hook, reporting sh2->ppc
-		if (BIZ_UNLIKELY(*hook_on))
+#ifdef SH2_BIZHOOK
+		// BizHawk execute hook, reporting sh2->ppc if it passes the filter
+		if (BIZ_EXEC_FILTER(biz_exec_filter[BIZ_CPU_MSH2 + sh2->is_slave], sh2->ppc))
 			biz_sh2_exec_hook(sh2, opcode);
+#endif
 
 		switch (opcode & ( 15 << 12))
 		{

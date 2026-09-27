@@ -1,6 +1,8 @@
 #ifndef __SH2_H__
 #define __SH2_H__
 
+#include "../../bizhawk_hooks.h"
+
 #if !defined(REGPARM) && defined(__i386__) 
 #define REGPARM(x) __attribute__((regparm(x)))
 #else
@@ -82,6 +84,8 @@ void sh2_unpack(SH2 *sh2, const unsigned char *buff);
 
 int  sh2_execute_drc(SH2 *sh2c, int cycles);
 int  sh2_execute_interpreter(SH2 *sh2c, int cycles);
+// the same, also reporting each instruction to BizHawk's execute hook
+int  sh2_execute_interpreter_bizhook(SH2 *sh2c, int cycles);
 
 static inline int sh2_execute(SH2 *sh2, int cycles, int use_drc)
 {
@@ -93,6 +97,10 @@ static inline int sh2_execute(SH2 *sh2, int cycles, int use_drc)
     ret = sh2_execute_drc(sh2, cycles);
   else
 #endif
+  // while this CPU watches something, for the whole time slice
+  if (BIZ_UNLIKELY(biz_exec_hook_on[BIZ_CPU_MSH2 + sh2->is_slave]))
+    ret = sh2_execute_interpreter_bizhook(sh2, cycles);
+  else
     ret = sh2_execute_interpreter(sh2, cycles);
 
   return sh2->cycles_timeslice - ret;

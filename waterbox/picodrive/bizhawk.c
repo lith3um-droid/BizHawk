@@ -299,9 +299,9 @@ ECL_EXPORT int Is32xActive(void)
 // Execute callbacks and CPU registers, for BizHawk's debugging API.
 //
 // All of this state is ECL_INVISIBLE, so savestates leave it out and loading
-// one keeps the current callback and watch lists. The CPU cores test
-// biz_exec_hook_on[cpu] before each instruction and call in here only when it
-// is set: while there is a callback and that CPU watches something.
+// one keeps the current callback and watch lists. The CPU cores call in here
+// only while biz_exec_hook_on[cpu] is set (there is a callback and that CPU
+// watches something) and the address passes biz_exec_filter[cpu].
 
 #define BIZ_WATCH_MAX 4096 // exact addresses per CPU; more turn on watch-all
 
@@ -310,25 +310,23 @@ typedef struct
 	int watch_all; // report every instruction
 	int count;
 	uint32_t addrs[BIZ_WATCH_MAX]; // sorted, no duplicates
-	// bit (addr >> 1) & 0xffff is set when some address in addrs has those bits
-	uint8_t filter[0x10000 / 8];
 } BizWatchList;
 
 ECL_INVISIBLE unsigned char biz_exec_hook_on[BIZ_CPU_COUNT];
+ECL_INVISIBLE unsigned char biz_exec_filter[BIZ_CPU_COUNT][0x10000 / 8];
 ECL_INVISIBLE static BizWatchList biz_exec_watch[BIZ_CPU_COUNT];
 ECL_INVISIBLE static void (*biz_exec_cb)(int cpu, uint32_t addr, uint32_t opcode);
 // while a callback runs: its cpu + 1, and the PC and SR of the instruction
 ECL_INVISIBLE static int biz_cb_cpu;
 ECL_INVISIBLE static uint32_t biz_cb_pc, biz_cb_sr;
 
+// the exact match, after the filter
 static int biz_watch_match(const BizWatchList *w, uint32_t addr)
 {
 	int lo, hi;
 
 	if (w->watch_all)
 		return 1;
-	if (!(w->filter[addr >> 4 & 0x1fff] & 1 << (addr >> 1 & 7)))
-		return 0;
 	lo = 0;
 	hi = w->count;
 	while (lo < hi)
@@ -410,14 +408,16 @@ static int biz_cmp_u32(const void *a, const void *b)
 ECL_EXPORT int SetExecWatchList(int cpu, const uint32_t *addrs, int count, int watchAll)
 {
 	BizWatchList *w;
+	uint8_t *filter;
 	int i, n;
 
 	if (cpu < 0 || cpu >= BIZ_CPU_COUNT)
 		return -1;
 	w = &biz_exec_watch[cpu];
-	memset(w->filter, 0, sizeof(w->filter));
+	filter = biz_exec_filter[cpu];
 	w->count = 0;
 	w->watch_all = watchAll || count > BIZ_WATCH_MAX;
+	memset(filter, w->watch_all ? 0xff : 0, sizeof(biz_exec_filter[cpu]));
 	if (!w->watch_all && addrs && count > 0)
 	{
 		for (i = 0; i < count; i++)
@@ -429,7 +429,7 @@ ECL_EXPORT int SetExecWatchList(int cpu, const uint32_t *addrs, int count, int w
 				w->addrs[n++] = w->addrs[i];
 		}
 		for (i = 0; i < n; i++)
-			w->filter[w->addrs[i] >> 4 & 0x1fff] |= 1 << (w->addrs[i] >> 1 & 7);
+			filter[w->addrs[i] >> 4 & 0x1fff] |= 1 << (w->addrs[i] >> 1 & 7);
 		w->count = n;
 	}
 	biz_update_exec_hooks();
